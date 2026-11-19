@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Trust Network Dashboard — Catalyst Problem 5</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Courier New', monospace; background: #0f0f12; color: #e0e0e0; display: flex; height: 100vh; }
+        #sidebar { width: 340px; background: #1a1a1f; border-right: 2px solid #333; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        #graph-container { flex: 1; position: relative; display: flex; flex-direction: column; }
+        #topbar { background: #16161b; border-bottom: 1px solid #333; padding: 10px 18px; font-size: 12px; color: #bbb; display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 18px; color: #00ff88; margin: 0 0 6px 0; }
+        .tabs { display: flex; gap: 6px; margin: 10px 0 14px 0; }
+        .tab-btn { flex: 1; background: #25252b; color: #ccc; border: 1px solid #444; padding: 7px 6px; cursor: pointer; font-family: inherit; font-size: 11px; border-radius: 4px; }
+        .tab-btn.active { border-color: #00ff88; color: #00ff88; background: #1c2c23; font-weight: bold; }
+        .campaign-card { background: #25252b; border: 1px solid #444; padding: 12px; margin-bottom: 10px; cursor: pointer; border-radius: 4px; transition: 0.2s; }
+        .campaign-card:hover { border-color: #00ff88; background: #2a2a32; }
+        .campaign-card.active { border-color: #00ff88; background: #1f2f25; }
+        .badge { background: #ff3366; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; display: inline-block; margin-right: 4px; margin-top: 4px; }
+        .badge-info { background: #2f5cff; }
+        .badge-warn { background: #d97706; }
+        .meta { font-size: 11px; color: #aaa; margin-top: 6px; line-height: 1.4; }
+        #cy { flex: 1; width: 100%; height: 100%; }
+        .loading { color: #888; font-style: italic; }
+        .footer-note { margin-top: auto; padding-top: 12px; border-top: 1px solid #2d2d35; font-size: 10px; color: #777; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>🛡️ TRUST NETWORK</h1>
+        <div style="font-size: 11px; color: #888;">Catalyst Problem 5 • Decentralized Reputation</div>
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-campaigns" onclick="switchTab('campaigns')">Campaigns</button>
+            <button class="tab-btn" id="tab-trust" onclick="switchTab('trust')">Trust Graph</button>
+            <button class="tab-btn" id="tab-sybil" onclick="switchTab('sybil')">Sybil Check</button>
+        </div>
+        <div id="panel-content"><div class="loading">Loading...</div></div>
+        <div class="footer-note">
+            Graph shows real PR-similarity &amp; project trust edges. Simulated benchmark datasets are disclosed per Catalyst guidelines.
+        </div>
+    </div>
+    <div id="graph-container">
+        <div id="topbar">
+            <span id="graph-title">Select a view from the sidebar</span>
+            <span id="graph-stats"></span>
+        </div>
+        <div id="cy"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.TRUSTNET_API_BASE || 'http://127.0.0.1:8000';
+        let cy;
+
+        function setActiveTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        function switchTab(name) {
+            setActiveTab(name);
+            if (name === 'campaigns') loadCampaigns();
+            else if (name === 'trust') loadTrustGraph();
+            else if (name === 'sybil') loadSybilCheck();
+        }
+
+        async function loadCampaigns() {
+            const panel = document.getElementById('panel-content');
+            panel.innerHTML = '<div class="loading">Loading detected campaigns...</div>';
+            try {
+                const res = await fetch(`${API_BASE}/campaigns-graph`);
+                const data = await res.json();
+                panel.innerHTML = '';
+
+                if (data.length === 0) {
+                    panel.innerHTML = '<p style="color:#888;font-size:12px;">No coordinated campaigns detected.</p>';
+                    document.getElementById('graph-title').textContent = 'No active campaigns';
+                    document.getElementById('graph-stats').textContent = '';
+                    if (cy) cy.destroy();
+                    return;
+                }
+
+                data.forEach((camp, idx) => {
+                    const card = document.createElement('div');
+                    card.className = 'campaign-card';
+                    card.innerHTML = `
+                        <strong>${camp.id}</strong><br>
+                        <span class="badge">${camp.size} accounts</span>
+                        <span class="badge badge-info">${camp.repo_count} repos</span>
+                        <span class="badge badge-warn">${camp.time_span_hours}h window</span>
+                        <div class="meta">${camp.evidence_summary || ''}</div>
+                    `;
+                    card.onclick = () => renderCampaignGraph(camp, card);
+                    panel.appendChild(card);
+                    if (idx === 0) renderCampaignGraph(camp, card);
+                });
+            } catch (err) {
+                panel.innerHTML = `<p style="color:#ff6666;font-size:12px;">API error: ${err.message}</p>`;
+            }
+        }
+
+        function renderCampaignGraph(campaign, cardEl) {
+            document.querySelectorAll('.campaign-card').forEach(c => c.classList.remove('active'));
+            cardEl.classList.add('active');
+            document.getElementById('graph-title').textContent = `${campaign.id}: ${campaign.evidence_summary || ''}`;
+            document.getElementById('graph-stats').textContent = `${campaign.nodes.length} nodes • ${campaign.edges.length} similarity edges`;
+
+            if (cy) cy.destroy();
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: [...campaign.nodes, ...campaign.edges],
+                style: [
+                    { selector: 'node', style: { 'background-color': '#ff3366', 'label': 'data(id)', 'color': '#fff', 'font-size': '10px', 'width': 22, 'height': 22 } },
+                    { selector: 'edge', style: { 'width': 1.5, 'line-color': '#666', 'opacity': 0.7 } }
+                ],
+                layout: { name: 'circle', padding: 50 }
+            });
+        }
+
+        async function loadTrustGraph() {
+            const panel = document.getElementById('panel-content');
+            panel.innerHTML = '<div class="loading">Loading decentralized trust graph...</div>';
+            try {
+                const res = await fetch(`${API_BASE}/trust-graph`);
+                const data = await res.json();
+                panel.innerHTML = `
+                    <div class="campaign-card active">
+                        <strong>Peer Trust Network</strong><br>
+                        <span class="badge badge-info">${data.nodes.length} projects</span>
+                        <span class="badge">${data.edge_count} trust edges</span>
+                        <div class="meta">Each project independently chooses which peer projects it trusts and sets edge weights (0.0 – 1.0).</div>
+                    </div>
+                `;
+                document.getElementById('graph-title').textContent = 'Decentralized Project-to-Project Trust Graph';
+                document.getElementById('graph-stats').textContent = `${data.nodes.length} projects • ${data.edge_count} directed edges`;
+
+                if (cy) cy.destroy();
+                cy = cytoscape({
+                    container: document.getElementById('cy'),
+                    elements: [...data.nodes, ...data.edges],
+                    style: [
+                        { selector: 'node', style: { 'background-color': '#00ff88', 'label': 'data(id)', 'color': '#fff', 'font-size': '10px', 'width': 24, 'height': 24 } },
+                        { selector: 'edge', style: { 'width': 2, 'line-color': '#38bdf8', 'target-arrow-color': '#38bdf8', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'label': 'data(weight)', 'color': '#94a3b8', 'font-size': '9px' } }
+                    ],
+                    layout: { name: 'cose', padding: 40 }
+                });
+            } catch (err) {
+                panel.innerHTML = `<p style="color:#ff6666;font-size:12px;">API error: ${err.message}</p>`;
+            }
+        }
+
+        async function loadSybilCheck() {
+            const panel = document.getElementById('panel-content');
+            panel.innerHTML = '<div class="loading">Running Sybil &amp; trust-farm audit...</div>';
+            try {
+                const res = await fetch(`${API_BASE}/sybil-check`);
+                const data = await res.json();
+                const evidenceHtml = (data.evidence || []).map(e => `<li>${e}</li>`).join('') || '<li>No Sybil rings or trust farms detected.</li>';
+                panel.innerHTML = `
+                    <div class="campaign-card active">
+                        <strong>Sybil &amp; Trust-Farm Audit</strong><br>
+                        <span class="badge">${data.ring_size} flagged accounts</span>
+                        <span class="badge badge-warn">${data.suspicious_projects.length} suspicious projects</span>
+                        <div class="meta">
+                            <strong>Evidence:</strong>
+                            <ul style="padding-left:16px;margin:6px 0;">${evidenceHtml}</ul>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('graph-title').textContent = 'Sybil & Trust-Farm Inspection';
+                document.getElementById('graph-stats').textContent = `${data.ring_size} flagged accounts`;
+            } catch (err) {
+                panel.innerHTML = `<p style="color:#ff6666;font-size:12px;">API error: ${err.message}</p>`;
+            }
+        }
+
+        loadCampaigns();
+    </script>
+</body>
+</html>

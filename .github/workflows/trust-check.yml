@@ -1,0 +1,29 @@
+name: Trust Check
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  trust-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Trust Analyzer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TRUSTNET_API_URL: ${{ vars.TRUSTNET_API_URL }}
+          TRUSTNET_VIEWER_PROJECT: ${{ vars.TRUSTNET_VIEWER_PROJECT }}
+          ALLOWED_REPOS: ${{ vars.ALLOWED_REPOS }}
+          TRUSTNET_ALLOW_SELF_REPO: ${{ vars.TRUSTNET_ALLOW_SELF_REPO }}
+          SEED_DEMO_DB: ${{ vars.SEED_DEMO_DB }}
+        run: python action/analyze_pr.py
