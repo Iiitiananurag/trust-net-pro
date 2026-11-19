@@ -564,12 +564,16 @@ def clear_test_data():
     """Wipe all data and reinitialize empty tables. Safe for live-only mode."""
     conn = connect()
     try:
+        # Disable foreign key checks to allow dropping tables in any order
+        conn.execute("PRAGMA foreign_keys = OFF")
         # Drop all tables safely
         tables = ["pull_requests", "accounts", "projects", "vouches", 
                   "denounces", "trust_edges", "denounce_appeals", "account_vouches"]
         for t in tables:
             conn.execute(f"DROP TABLE IF EXISTS {t}")
         conn.commit()
+        # Re-enable foreign keys
+        conn.execute("PRAGMA foreign_keys = ON")
         # Recreate schema with correct column names
         init_db()
         return {"status": "cleared", "message": "All data wiped. DB reinitialized."}
