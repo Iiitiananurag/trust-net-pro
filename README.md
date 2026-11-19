@@ -1,4 +1,4 @@
-﻿# 🛡️ TrustNet: Decentralized Trust Network for Open Source
+# 🛡️ TrustNet: Decentralized Trust Network for Open Source
 
 > **Catalyst Problem 5 Submission**  
 > Protecting projects from AI slop campaigns without central authority.  
@@ -111,3 +111,23 @@ Our production instance runs on Render free tier:
 🔗 **[Health Check](https://trust-net-pro.onrender.com/health)** | 🔗 **[Swagger UI](https://trust-net-pro.onrender.com/docs)**
 
 > ⚠️ Free-tier instances sleep after inactivity — first request may take ~50 seconds to wake. Cloud storage is ephemeral; writes are disabled by default (`TRUSTNET_ALLOW_WRITES=false`). See [Threat Model](#-threat-model--design-rationale).
+
+### 🎨 Interactive Dashboard (No Extra Hosting Required)
+
+Skip Swagger UI for demos — use our purpose-built dark-mode control panel served directly by FastAPI:
+
+👉 **[Open TrustNet Dashboard](https://trust-net-pro.onrender.com/dashboard)** | Local: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+
+**What you'll see:**
+- **Live stats bar**: Projects, trust edges, detected campaigns, Sybil accounts (updates on every API call)
+- **Interactive trust graph**: Drag-and-zoom Cytoscape.js mesh showing decentralized peer-to-peer trust (patricia=red, ghostty=green, arrow thickness = weight)
+- **Contributor analyzer**: Type any handle + viewer → instant risk card 🟢⚪🔴 with score, evidence lines, and Sybil flags
+- **Quick-demo buttons**: One-click load of test personas (`john`, `sarah`, `bot-001`, `sybil-01`) to contrast genuine vs. adversarial behavior
+- **Campaign table**: All detected clusters with burst/freshness evidence, sortable columns
+- **Sybil panel**: Flagged farms, named ring members, and heuristic evidence
+
+> 💡 **Why not Netlify/Vercel?** The dashboard is a single static HTML file served by FastAPI itself (`/dashboard` → `FileResponse`). Zero CORS config, no separate deployment, same-origin fetches to `/trust-graph` and `/campaigns`. Push once → both API and UI update together on Render. Perfect for demo day reliability.
+
+
+
+| **Dashboard UI** | `static/dashboard.html` | Self-contained Cytoscape.js + vanilla JS frontend; served via `/dashboard` endpoint; zero external hosting or build step. |
