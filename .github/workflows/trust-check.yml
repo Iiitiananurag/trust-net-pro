@@ -12,18 +12,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run Trust Analyzer
+      
+      - name: Run Trust Analyzer (SAFE MODE BY DEFAULT)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          
+          # Optional: Connect to hosted API for cross-repo analysis
           TRUSTNET_API_URL: ${{ vars.TRUSTNET_API_URL }}
+          
+          # Project perspective for scoring
           TRUSTNET_VIEWER_PROJECT: ${{ vars.TRUSTNET_VIEWER_PROJECT }}
+          
+          # ⚠️ SAFETY GATES (Crucial for Hackathon Compliance)
+          # Default to TRUE so judges can't accidentally spam real repos
+          TRUSTNET_DRY_RUN: ${{ vars.TRUSTNET_DRY_RUN || 'true' }}
+          
+          # Whitelist of allowed repos (empty = only self-repo allowed if ALLOW_SELF_REPO=1)
           ALLOWED_REPOS: ${{ vars.ALLOWED_REPOS }}
+          
+          # Allow posting on THIS specific repo (set to '1' to enable live mode here)
           TRUSTNET_ALLOW_SELF_REPO: ${{ vars.TRUSTNET_ALLOW_SELF_REPO }}
+          
+          # Seed demo data if DB is empty (for isolated testing)
           SEED_DEMO_DB: ${{ vars.SEED_DEMO_DB }}
+          
         run: python action/analyze_pr.py

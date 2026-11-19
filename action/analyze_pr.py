@@ -125,6 +125,19 @@ def _analyze_locally(pr_id, repo_name, author, title, body, diff, opened_at, vie
 
 
 def main():
+  def main():
+    # === SAFETY GATE: Default to DRY RUN unless explicitly opted-in ===
+    DRY_RUN = os.environ.get("TRUSTNET_DRY_RUN", "true").lower() == "true"
+    
+    if DRY_RUN:
+        print("\n" + "=" * 70)
+        print("🛡️  TRUSTNET DRY-RUN MODE (default)")
+        print("=" * 70)
+        print("This tool will NOT post comments to GitHub.")
+        print("To enable live posting, set TRUSTNET_DRY_RUN=false AND")
+        print("add the target repo to ALLOWED_REPOS env var.")
+        print("=" * 70 + "\n")
+    
     # Mock mode for local testing
     if os.environ.get("MOCK_GITHUB") == "1":
         print("MOCK MODE: Generating comment for 'bot-001'...")
@@ -138,7 +151,7 @@ def main():
             score, has, ev = score_contributor(conn, "patricia", "bot-001")
         finally:
             conn.close()
-
+        
         report = {
             "viewer": "patricia",
             "risk": "elevated" if (matched or sybil_flagged) else classify(score, has),
@@ -153,38 +166,41 @@ def main():
         print(format_comment(report))
         print("=" * 50 + "\n")
         return
-
+    
     # Real GitHub Actions mode
     token = os.environ.get("GITHUB_TOKEN")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
     pr_number = int(os.environ.get("PR_NUMBER", 0))
-
+    
     if not token or not repo_name or not pr_number:
         print("Error: Missing GITHUB_TOKEN, GITHUB_REPOSITORY, or PR_NUMBER")
         sys.exit(1)
-
+    
     allowed_repos = {
         r.strip().lower()
         for r in os.environ.get("ALLOWED_REPOS", "").split(",")
         if r.strip()
     }
     allow_self = os.environ.get("TRUSTNET_ALLOW_SELF_REPO") == "1"
-    if not allow_self and repo_name.lower() not in allowed_repos:
+    
+    # Double safety check even outside dry-run
+    if not DRY_RUN and not allow_self and repo_name.lower() not in allowed_repos:
         print(
             f"Safety guard: '{repo_name}' is not in ALLOWED_REPOS. "
             "Set ALLOWED_REPOS (or TRUSTNET_ALLOW_SELF_REPO=1 on your own sandbox repo) to post comments."
         )
         sys.exit(0)
-
+    
     g = Github(token)
     repo = g.get_repo(repo_name)
     pr = repo.get_pull(pr_number)
-
+    
     viewer = os.environ.get("TRUSTNET_VIEWER_PROJECT", "").strip() or repo_name
     api_url = os.environ.get("TRUSTNET_API_URL", "").strip()
+    
     opened_at = (pr.created_at or datetime.now()).isoformat()
     author_created = pr.user.created_at.isoformat() if pr.user and pr.user.created_at else None
-
+    
     if api_url:
         payload = {
             "pr_id": f"{repo_name}#{pr_number}",
@@ -208,10 +224,18 @@ def main():
             opened_at=opened_at,
             viewer=viewer,
         )
-
-    pr.create_issue_comment(format_comment(report))
-    print(f"Posted analysis to PR #{pr_number} (risk={report['risk']})")
-
+    
+    # Only post if explicitly opted-in AND passed all guards
+    if DRY_RUN:
+        print("\n[DRY RUN] Would have posted this comment:")
+        print("-" * 60)
+        print(format_comment(report))
+        print("-" * 60)
+        print(f"\n✅ Analysis complete. Risk={report['risk']} Score={report['trust_score']:.2f}")
+        print("💡 To enable live posting: set TRUSTNET_DRY_RUN=false and add repo to ALLOWED_REPOS\n")
+    else:
+        pr.create_issue_comment(format_comment(report))
+        print(f"Posted analysis to PR #{pr_number} (risk={report['risk']})")
 
 if __name__ == "__main__":
     main()
