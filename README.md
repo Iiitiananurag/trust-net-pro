@@ -9,6 +9,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 
 ---
+## 🌟Click for the [Release Notes](./Description.md)
+
+
 
 ## 🌟 Why TrustNet?
 
