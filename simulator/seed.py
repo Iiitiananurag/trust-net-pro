@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import random
 import urllib.request
 from datetime import datetime, timedelta
@@ -62,7 +62,7 @@ def import_ghostty_vouch_list(conn, content, project_id="ghostty", trusted_by="p
                 INSERT OR REPLACE INTO denounces (project_id, account_id, reason, created_at, expires_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (project_id, handle, reason, NOW.isoformat(), (NOW + timedelta(days=90)).isoformat()),
+                (project_id, handle, reason, NOW.isoformat(), (NOW + timedelta(days=3650)).isoformat()),
             )
             denounced_count += 1
         else:

@@ -228,3 +228,53 @@ def detect_sybil_rings(conn, fresh_days=14, min_farm_vouches=10, fresh_ratio_thr
         "ring_size": len(sybil_accounts),
         "evidence": evidence,
     }
+
+
+def contributor_history(conn, account_id):
+    """Persistent behavioral record: past campaigns, rings, and denounce sources."""
+    history = {
+        "past_campaigns": [],
+        "ring_members": [],
+        "external_denounces": [],
+        "pr_count": 0,
+        "repo_spread": 0,
+    }
+
+    # 1. Past campaign involvement
+    for camp in detect_campaigns_detailed(conn, min_cluster_size=3):
+        if account_id in camp["accounts"]:
+            history["past_campaigns"].append({
+                "id": camp["id"],
+                "summary": camp["evidence_summary"],
+                "repos": camp["repo_count"],
+                "is_burst": camp["is_burst"],
+            })
+
+    # 2. Ring membership WITH names of co-members
+    sybil = detect_sybil_rings(conn)
+    for ring in sybil.get("mutual_rings", []):
+        if account_id in ring:
+            history["ring_members"] = [a for a in ring if a != account_id]
+
+    # 3. ALL active denounces incl. untrusted sources (advisory), esp. Ghostty
+    rows = conn.execute(
+        "SELECT project_id, reason, expires_at FROM denounces WHERE account_id=?",
+        (account_id,),
+    ).fetchall()
+    now_iso = datetime.now().isoformat()
+    for r in rows:
+        if r["expires_at"] and r["expires_at"] < now_iso:
+            continue
+        history["external_denounces"].append({
+            "project": r["project_id"],
+            "reason": r["reason"],
+        })
+
+    # 4. Activity footprint
+    stats = conn.execute(
+        "SELECT COUNT(*) AS n, COUNT(DISTINCT repo_id) AS repos FROM pull_requests WHERE author_id=?",
+        (account_id,),
+    ).fetchone()
+    history["pr_count"] = stats["n"]
+    history["repo_spread"] = stats["repos"]
+    return history

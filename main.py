@@ -1,4 +1,4 @@
-﻿import os
+import os
 import hmac
 import hashlib
 import json
@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from engine.campaigns import detect_campaigns_detailed, detect_sybil_rings
+from engine.campaigns import detect_campaigns_detailed, detect_sybil_rings, contributor_history
 from engine.contracts import AnalysisReport, AppealRequest, PREvent, TrustEdge
 from engine.db import connect, ensure_account, ensure_project, init_db, upsert_pr_and_author
 from engine.trust import DEFAULT_DENOUNCE_TTL_DAYS, classify, score_contributor
@@ -135,6 +135,35 @@ def analyze_pr(
                 "âš  Sybil risk: account is vouched exclusively by a suspicious trust farm or mutual-vouch ring"
             )
             
+        # 6. Persistent behavioral history (past campaigns, rings, external flags)
+        hist = contributor_history(conn, event.author)
+
+        for pc in hist["past_campaigns"]:
+            if pc["id"] != campaign_id:
+                risk = "elevated"
+                evidence.append(
+                    f"[!] Prior campaign history: member of {pc['id']} - {pc['summary']}"
+                )
+
+        if hist["ring_members"]:
+            risk = "elevated"
+            evidence.append(
+                "[!] Mutual-vouch ring: cycles with " + ", ".join(hist["ring_members"][:8])
+            )
+
+        for d in hist["external_denounces"]:
+            if d["project"] == "ghostty":
+                evidence.append(
+                    f"[FLAG] GHOSTTY: publicly denounced on Ghostty's VOUCHED.td ({d['reason']})"
+                )
+                if not has_signals:
+                    risk = "elevated"
+            elif d["project"] != perspective:
+                evidence.append(
+                    f"[i] Advisory: denounced by '{d['project']}' ({d['reason']}) - "
+                    "not weighted unless you declare trust in that project"
+                )
+
         confidence = 0.9 if (matched_campaign or sybil_flagged) else (0.8 if has_signals else 0.2)
         
         return AnalysisReport(
@@ -522,3 +551,12 @@ def _format_analysis_markdown(risk, score, evidence, campaign, sybil_flagged):
         lines.append("No significant trust signals found. Proceed with standard review.\n")
     return "\n".join(lines)
 
+
+
+@app.get("/contributor/{account_id}/history")
+def get_history(account_id: str):
+    conn = connect()
+    try:
+        return contributor_history(conn, account_id)
+    finally:
+        conn.close()
