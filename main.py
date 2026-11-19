@@ -612,3 +612,12 @@ def graph_view():
 </body>
 </html>
 """
+
+
+# --- CUSTOM DASHBOARD UI ---
+from fastapi.responses import FileResponse
+from pathlib import Path as _Path
+
+@app.get("/dashboard", response_class=FileResponse)
+def dashboard():
+    return FileResponse(_Path(__file__).parent / "static" / "dashboard.html")

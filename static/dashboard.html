@@ -1,0 +1,188 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrustNet Dashboard</title>
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1421; --panel: #16203a; --panel2: #1c2a4a;
+    --text: #e2e8f0; --muted: #8fa3c0; --accent: #4f9cf9;
+    --green: #34d399; --red: #f87171; --amber: #fbbf24; --border: #2a3b5e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; }
+  header { padding: 18px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 14px; }
+  header h1 { font-size: 22px; } header h1 span { color: var(--accent); }
+  header p { color: var(--muted); font-size: 13px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 18px 28px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .stat .num { font-size: 30px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; padding: 0 28px 18px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card h2 { font-size: 15px; margin-bottom: 12px; color: var(--text); }
+  .card h2 small { color: var(--muted); font-weight: 400; }
+  #cy { height: 420px; background: var(--panel2); border-radius: 8px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  input, select { background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 8px; font-size: 14px; flex: 1; min-width: 120px; }
+  button { background: var(--accent); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px;
+    font-size: 14px; cursor: pointer; font-weight: 600; }
+  button:hover { filter: brightness(1.15); }
+  button.ghost { background: var(--panel2); border: 1px solid var(--border); color: var(--muted); font-weight: 400; }
+  .risk { display: none; margin-top: 12px; padding: 14px; border-radius: 10px; border: 1px solid var(--border); }
+  .risk.low { background: rgba(52,211,153,.08); border-color: var(--green); }
+  .risk.neutral { background: rgba(143,163,192,.08); border-color: var(--muted); }
+  .risk.elevated { background: rgba(248,113,113,.08); border-color: var(--red); }
+  .risk .badge { font-size: 18px; font-weight: 800; }
+  .risk.low .badge { color: var(--green); } .risk.neutral .badge { color: var(--muted); } .risk.elevated .badge { color: var(--red); }
+  .risk .score { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+  .risk ul { list-style: none; } .risk li { font-size: 13px; padding: 5px 0; border-top: 1px dashed var(--border); color: var(--text); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .pill { padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .pill.burst { background: rgba(248,113,113,.15); color: var(--red); }
+  .pill.ok { background: rgba(52,211,153,.15); color: var(--green); }
+  .full { grid-column: 1 / -1; }
+  .sybil-list { font-size: 13px; color: var(--muted); line-height: 1.9; word-break: break-all; }
+  .sybil-list b { color: var(--red); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 14px; border-top: 1px solid var(--border); }
+  a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡️ Trust<span>Net</span></h1>
+  <p>Decentralized trust network · Catalyst Problem 5 · no central authority</p>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="num" id="s-projects">–</div><div class="lbl">Projects</div></div>
+  <div class="stat"><div class="num" id="s-edges">–</div><div class="lbl">Trust Edges</div></div>
+  <div class="stat"><div class="num" id="s-campaigns">–</div><div class="lbl">Campaigns Detected</div></div>
+  <div class="stat"><div class="num" id="s-sybil">–</div><div class="lbl">Sybil Accounts Flagged</div></div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Trust Graph <small>· arrow thickness = weight · drag &amp; zoom</small></h2>
+    <div id="cy"></div>
+  </div>
+
+  <div class="card">
+    <h2>Contributor Analyzer <small>· perspective-based scoring</small></h2>
+    <div class="row">
+      <input id="in-account" placeholder="account (e.g. bot-001)" value="john">
+      <input id="in-viewer" placeholder="viewer project" value="patricia">
+      <button onclick="analyze()">Analyze</button>
+    </div>
+    <div class="row">
+      <button class="ghost" onclick="quick('john')">john (genuine)</button>
+      <button class="ghost" onclick="quick('sarah')">sarah (newcomer)</button>
+      <button class="ghost" onclick="quick('bot-001')">bot-001 (campaign)</button>
+      <button class="ghost" onclick="quick('sybil-01')">sybil-01 (ring)</button>
+    </div>
+    <div class="risk" id="risk-card">
+      <div class="badge" id="r-badge"></div>
+      <div class="score" id="r-score"></div>
+      <ul id="r-evidence"></ul>
+    </div>
+  </div>
+
+  <div class="card full">
+    <h2>Cross-Repo Campaigns <small>· MinHash LSH similarity + burst analysis</small></h2>
+    <table>
+      <thead><tr><th>ID</th><th>Accounts</th><th>PRs</th><th>Repos</th><th>Span</th><th>New Accts</th><th>Status</th><th>Evidence</th></tr></thead>
+      <tbody id="campaign-rows"><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card full">
+    <h2>Sybil Detection <small>· mutual-vouch rings (SCC) + trust-farm heuristics</small></h2>
+    <div class="sybil-list" id="sybil-info">Loading…</div>
+  </div>
+</div>
+
+<footer>TrustNet · <a href="/docs">API docs</a> · <a href="/trust-graph">raw graph JSON</a> · synthetic benchmark + real Ghostty VOUCHED.td import</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function loadGraph() {
+  const g = await (await fetch('/trust-graph')).json();
+  $('s-projects').textContent = g.nodes.length;
+  $('s-edges').textContent = g.edge_count;
+  cytoscape({
+    container: $('cy'),
+    elements: { nodes: g.nodes, edges: g.edges },
+    style: [
+      { selector: 'node', style: { label: 'data(id)', 'background-color': '#4f9cf9',
+        color: '#8fa3c0', 'font-size': 9, 'text-valign': 'bottom', width: 18, height: 18 } },
+      { selector: 'node[id = "patricia"]', style: { 'background-color': '#f87171', width: 32, height: 32 } },
+      { selector: 'node[id = "ghostty"]', style: { 'background-color': '#34d399', width: 32, height: 32 } },
+      { selector: 'edge', style: { 'curve-style': 'bezier', 'target-arrow-shape': 'triangle',
+        'line-color': '#2a3b5e', 'target-arrow-color': '#4f9cf9',
+        width: 'mapData(weight, 0, 1, 1, 5)' } }
+    ],
+    layout: { name: 'cose', animate: false }, wheelSensitivity: 0.2
+  });
+}
+
+async function loadCampaigns() {
+  const c = await (await fetch('/campaigns')).json();
+  const list = c.campaigns || c;
+  $('s-campaigns').textContent = Array.isArray(list) ? list.length : '–';
+  const rows = (Array.isArray(list) ? list : []).map(x => `
+    <tr><td>${x.id ?? '–'}</td><td>${x.size ?? x.accounts?.length ?? '–'}</td>
+    <td>${x.pr_count ?? '–'}</td><td>${x.repo_count ?? '–'}</td>
+    <td>${x.span_hours != null ? x.span_hours.toFixed(1) + 'h' : '–'}</td>
+    <td>${x.new_account_ratio != null ? Math.round(x.new_account_ratio * 100) + '%' : '–'}</td>
+    <td><span class="pill ${x.is_burst ? 'burst' : 'ok'}">${x.is_burst ? 'BURST' : 'cluster'}</span></td>
+    <td>${x.evidence_summary ?? ''}</td></tr>`).join('');
+  $('campaign-rows').innerHTML = rows || '<tr><td colspan="8">No campaigns detected.</td></tr>';
+}
+
+async function loadSybil() {
+  const s = await (await fetch('/sybil-check')).json();
+  $('s-sybil').textContent = (s.sybil_accounts || []).length;
+  let html = '';
+  if ((s.suspicious_projects || []).length)
+    html += `<b>Suspicious projects:</b> ${s.suspicious_projects.join(', ')}<br>`;
+  if ((s.mutual_rings || []).length)
+    html += `<b>Mutual-vouch rings:</b> ${s.mutual_rings.map(r => '[' + r.join(' ↔ ') + ']').join(' ')}<br>`;
+  if ((s.sybil_accounts || []).length)
+    html += `<b>Flagged accounts (${s.sybil_accounts.length}):</b> ${s.sybil_accounts.slice(0, 40).join(', ')}${s.sybil_accounts.length > 40 ? ' …' : ''}<br>`;
+  (s.evidence || []).forEach(e => html += `• ${e}<br>`);
+  $('sybil-info').innerHTML = html || 'No Sybil activity detected.';
+}
+
+function quick(name) { $('in-account').value = name; analyze(); }
+
+async function analyze() {
+  const acct = $('in-account').value.trim(), viewer = $('in-viewer').value.trim() || 'patricia';
+  if (!acct) return;
+  const card = $('risk-card');
+  try {
+    const d = await (await fetch(`/contributor/${encodeURIComponent(acct)}?viewer=${encodeURIComponent(viewer)}`)).json();
+    card.style.display = 'block';
+    card.className = 'risk ' + d.risk;
+    const emoji = { low: '🟢 LOW RISK', neutral: '⚪ NEUTRAL', elevated: '🔴 ELEVATED RISK' }[d.risk] || d.risk;
+    $('r-badge').textContent = emoji + (d.sybil_flagged ? ' · SYBIL FLAG' : '');
+    $('r-score').textContent = `score ${Number(d.score).toFixed(2)} · viewed by ${d.viewer} · account ${d.account}`;
+    $('r-evidence').innerHTML = (d.evidence && d.evidence.length)
+      ? d.evidence.map(e => `<li>${e}</li>`).join('')
+      : '<li>No signals yet — newcomers are treated neutrally.</li>';
+  } catch (err) {
+    card.style.display = 'block'; card.className = 'risk neutral';
+    $('r-badge').textContent = 'Error'; $('r-score').textContent = String(err);
+    $('r-evidence').innerHTML = '';
+  }
+}
+
+loadGraph(); loadCampaigns(); loadSybil(); analyze();
+</script>
+</body>
+</html>
