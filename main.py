@@ -1,4 +1,4 @@
-import os
+﻿import os
 import hmac
 import hashlib
 import json
@@ -118,7 +118,7 @@ def analyze_pr(
         if matched_campaign:
             campaign_id = matched_campaign["id"]
             risk = "elevated"
-            evidence.append(f"⚠ Coordinated campaign ({campaign_id}): {matched_campaign['evidence_summary']}")
+            evidence.append(f"âš  Coordinated campaign ({campaign_id}): {matched_campaign['evidence_summary']}")
             campaign_details = {
                 "size": matched_campaign["size"],
                 "pr_count": matched_campaign["pr_count"],
@@ -132,7 +132,7 @@ def analyze_pr(
         if sybil_flagged:
             risk = "elevated"
             evidence.append(
-                "⚠ Sybil risk: account is vouched exclusively by a suspicious trust farm or mutual-vouch ring"
+                "âš  Sybil risk: account is vouched exclusively by a suspicious trust farm or mutual-vouch ring"
             )
             
         confidence = 0.9 if (matched_campaign or sybil_flagged) else (0.8 if has_signals else 0.2)
@@ -173,7 +173,7 @@ def get_contributor(
         sybil_flagged = account_id in sybil["sybil_accounts"]
         risk = "elevated" if sybil_flagged else classify(score, has_signals)
         if sybil_flagged:
-            evidence.append("⚠ Sybil risk: account flagged in Sybil/trust-farm analysis")
+            evidence.append("âš  Sybil risk: account flagged in Sybil/trust-farm analysis")
         return {
             "viewer": viewer,
             "account": account_id,
@@ -401,14 +401,14 @@ async def github_webhook(request: Request):
     risk = "elevated" if (matched_campaign or sybil_flagged) else classify(score, has_signals)
     
     # 4. Format Comment
-    risk_emoji = {"low": "🟢", "neutral": "⚪", "elevated": "🔴"}[risk]
+    risk_emoji = {"low": "ðŸŸ¢", "neutral": "âšª", "elevated": "ðŸ”´"}[risk]
     body_md = f"## {risk_emoji} TrustNet Analysis\n\n"
     body_md += f"**Risk:** {risk.upper()} | **Score:** {score:.2f}\n\n"
     
     if matched_campaign:
-        body_md += f"⚠️ **ALERT ({matched_campaign['id']}):** {matched_campaign['evidence_summary']}\n"
+        body_md += f"âš ï¸ **ALERT ({matched_campaign['id']}):** {matched_campaign['evidence_summary']}\n"
     elif sybil_flagged:
-        body_md += "⚠️ **SYBIL ALERT:** Account linked to suspicious trust farm/ring.\n"
+        body_md += "âš ï¸ **SYBIL ALERT:** Account linked to suspicious trust farm/ring.\n"
     elif evidence:
         body_md += "**Evidence:**\n" + "\n".join([f"- {e}" for e in evidence]) + "\n"
     else:
@@ -430,3 +430,95 @@ async def github_webhook(request: Request):
         print("GitHub App not configured. Comment not posted.")
 
     return {"status": "ok"}
+
+# --- GITHUB APP WEBHOOK HANDLER (SAFE MODE) ---
+@app.post("/webhook")
+async def github_webhook(request: Request):
+    body_bytes = await request.body()
+    
+    # Verify signature
+    if WEBHOOK_SECRET:
+        sig_header = request.headers.get("X-Hub-Signature-256", "")
+        expected = "sha256=" + hmac.new(
+            WEBHOOK_SECRET.encode(), body_bytes, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig_header, expected):
+            raise HTTPException(status_code=403, detail="Invalid signature")
+    
+    data = json.loads(body_bytes)
+    event_type = request.headers.get("X-GitHub-Event")
+    
+    if event_type != "pull_request":
+        return {"message": "Ignored"}
+
+    action = data.get("action")
+    if action not in ["opened", "reopened"]:
+        return {"message": "Ignored"}
+
+    pr = data["pull_request"]
+    author = pr["user"]["login"]
+    pr_number = pr["number"]
+    repo_full_name = data["repository"]["full_name"]
+    installation_id = data["installation"]["id"]
+
+    print(f"Processing PR #{pr_number} by {author} in {repo_full_name}")
+
+    conn = connect()
+    try:
+        upsert_pr_and_author(
+            conn,
+            pr_id=f"{repo_full_name}#{pr_number}",
+            repo_id=repo_full_name,
+            author_id=author,
+            title=pr.get("title", ""),
+            body=pr.get("body", "") or "",
+            diff="",
+            created_at=pr["created_at"],
+            author_created_at=pr["user"].get("created_at"),
+        )
+        
+        campaigns = detect_campaigns_detailed(conn, min_cluster_size=3)
+        sybil = detect_sybil_rings(conn)
+        score, has_signals, evidence = score_contributor(conn, repo_full_name, author)
+    finally:
+        conn.close()
+
+    matched_campaign = next((c for c in campaigns if author in c["accounts"]), None)
+    sybil_flagged = author in sybil["sybil_accounts"]
+    risk = "elevated" if (matched_campaign or sybil_flagged) else classify(score, has_signals)
+
+    # Build structured response WITHOUT auto-posting
+    result = {
+        "status": "analyzed",
+        "pr_number": pr_number,
+        "repo": repo_full_name,
+        "author": author,
+        "risk": risk,
+        "score": round(score, 4),
+        "has_signals": has_signals,
+        "evidence": evidence,
+        "campaign_id": matched_campaign["id"] if matched_campaign else None,
+        "sybil_flagged": sybil_flagged,
+        "comment_body": _format_analysis_markdown(risk, score, evidence, matched_campaign, sybil_flagged),
+        "auto_post_disabled": True,
+        "reason": "Ephemeral storage detected; writes require persistent DB migration",
+    }
+    
+    print(f"Analysis ready for PR #{pr_number}: risk={risk}")
+    return result
+
+
+def _format_analysis_markdown(risk, score, evidence, campaign, sybil_flagged):
+    """Helper to generate markdown without posting it."""
+    emoji = {"low": "🟢", "neutral": "⚪", "elevated": "🔴"}[risk]
+    lines = [f"## {emoji} TrustNet Analysis\n", f"**Risk:** {risk.upper()} | **Score:** {score:.2f}\n"]
+    if campaign:
+        lines.append(f"⚠️ **ALERT ({campaign['id']}):** {campaign['evidence_summary']}\n")
+    elif sybil_flagged:
+        lines.append("⚠️ **SYBIL ALERT:** Account linked to suspicious trust farm/ring.\n")
+    elif evidence:
+        lines.append("**Evidence:**\n" + "\n".join([f"- {e}" for e in evidence]) + "\n")
+    else:
+        lines.append("No significant trust signals found. Proceed with standard review.\n")
+    return "\n".join(lines)
+
