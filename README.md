@@ -25,7 +25,7 @@ Most trust systems rely on centralized deny lists (like Ghostty's VOUCHED.td). T
 
 ---
 
-## 🚀 Quick Start & Live Demo
+## 🚀 Quick Start &Live Demo
 
 ### Option A: Use the Hosted GitHub App (Zero Setup)
 
