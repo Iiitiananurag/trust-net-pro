@@ -37,6 +37,7 @@ except Exception as e:
     integration = None
 
 @asynccontextmanager
+@asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
     # Auto-seed benchmark data if DB is empty (first boot after deploy)
@@ -44,7 +45,7 @@ async def lifespan(_app: FastAPI):
         conn = connect()
         count = conn.execute("SELECT COUNT(*) FROM pull_requests").fetchone()[0]
         if count == 0:
-            print("\U0001f331 Empty DB detected - auto-seeding benchmark data...")
+            print("🌱 Empty DB detected - auto-seeding benchmark data...")
             from simulator.seed import seed
             seed(malicious_b=False, include_sybil_ring=True, ghostty_vouch_file="auto")
         conn.close()
