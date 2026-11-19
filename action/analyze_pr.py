@@ -5,46 +5,42 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+# Fix path setup so imports work when run as script OR module
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from github import Github
-
 from engine.campaigns import detect_campaigns_detailed, detect_sybil_rings
 from engine.db import connect, init_db, upsert_pr_and_author
 from engine.trust import classify, score_contributor
 
 
 def format_comment(report):
-    risk_emoji = {"low": "ðŸŸ¢", "neutral": "âšª", "elevated": "ðŸ”´"}[report["risk"]]
+    risk_emoji = {"low": "🟢", "neutral": "⚪", "elevated": "🔴"}[report["risk"]]
     viewer = report.get("viewer", "local")
     lines = [
         f"## {risk_emoji} Trust Network Analysis",
-        f"**Viewer:** `{viewer}` | **Risk:** {report['risk'].upper()} | **Score:** {report['trust_score']:.2f}",
+        f" Viewer: `{viewer}`  |  Risk:  {report['risk'].upper()} |  Score:  {report['trust_score']:.2f}",
         "",
-        "**Evidence:**",
+        " Evidence:",
     ]
     if not report["evidence"]:
         lines.append("- No signals yet (newcomers are treated neutrally)")
     else:
         for ev in report["evidence"]:
             lines.append(f"- {ev}")
-
     if report.get("campaign_id"):
         lines.append("")
         summary = report.get("campaign_summary") or "Coordinated cross-repository campaign detected."
-        lines.append(f"âš  **ALERT ({report['campaign_id']}):** {summary}")
-
+        lines.append(f"⚠ **ALERT ({report['campaign_id']}):** {summary}")
     if report.get("sybil_flagged"):
         lines.append("")
-        lines.append("âš  **SYBIL ALERT:** Account is linked to a suspicious trust farm or mutual-vouch ring.")
-
+        lines.append("⚠ **SYBIL ALERT:** Account is linked to a suspicious trust farm or mutual-vouch ring.")
     if report.get("synthetic_demo"):
         lines.append("")
         lines.append("> *Note: Evaluated against synthetic benchmark data for demonstration.*")
-
     lines.append("")
     lines.append("---")
-    lines.append("*Powered by Catalyst Problem 5 â€” Decentralized Trust Network*")
+    lines.append("*Powered by Catalyst Problem 5 — Decentralized Trust Network*")
     return "\n".join(lines)
 
 
@@ -62,9 +58,9 @@ def _analyze_via_api(api_url, payload, viewer):
     summary = None
     if data.get("campaign_id"):
         summary = (
-            f"{details.get('size', '?')} accounts submitted "
-            f"{details.get('pr_count', '?')} similar PRs across "
-            f"{details.get('repo_count', '?')} repos."
+            f"{details.get('size', '?')} accounts submitted  "
+            f"{details.get('pr_count', '?')} similar PRs across  "
+            f"{details.get('repo_count', '?')} repos. "
         )
     return {
         "viewer": data.get("viewer", viewer),
@@ -89,7 +85,6 @@ def _analyze_locally(pr_id, repo_name, author, title, body, diff, opened_at, vie
             seed(False)
             conn = connect()
             synthetic_demo = True
-
         upsert_pr_and_author(
             conn,
             pr_id=pr_id,
@@ -100,7 +95,6 @@ def _analyze_locally(pr_id, repo_name, author, title, body, diff, opened_at, vie
             diff=diff,
             created_at=opened_at,
         )
-
         campaigns = detect_campaigns_detailed(conn, min_cluster_size=3)
         matched = next((c for c in campaigns if author in c["accounts"]), None)
         sybil = detect_sybil_rings(conn)
@@ -108,7 +102,6 @@ def _analyze_locally(pr_id, repo_name, author, title, body, diff, opened_at, vie
         score, has, ev = score_contributor(conn, viewer, author)
     finally:
         conn.close()
-
     risk = "elevated" if (matched or sybil_flagged) else classify(score, has)
     if matched:
         ev = ev + [f"Campaign {matched['id']}: {matched['evidence_summary']}"]
@@ -125,19 +118,14 @@ def _analyze_locally(pr_id, repo_name, author, title, body, diff, opened_at, vie
 
 
 def main():
-  def main():
     # === SAFETY GATE: Default to DRY RUN unless explicitly opted-in ===
     DRY_RUN = os.environ.get("TRUSTNET_DRY_RUN", "true").lower() == "true"
     
-    if DRY_RUN:
-        print("\n" + "=" * 70)
-        print("ðŸ›¡ï¸  TRUSTNET DRY-RUN MODE (default)")
-        print("=" * 70)
-        print("This tool will NOT post comments to GitHub.")
-        print("To enable live posting, set TRUSTNET_DRY_RUN=false AND")
-        print("add the target repo to ALLOWED_REPOS env var.")
-        print("=" * 70 + "\n")
-    
+    print("\n" + "=" * 70)
+    print("🛡️  TRUSTNET ANALYZER STARTING")
+    print(f"Dry-run mode: {DRY_RUN}")
+    print("=" * 70 + "\n")
+
     # Mock mode for local testing
     if os.environ.get("MOCK_GITHUB") == "1":
         print("MOCK MODE: Generating comment for 'bot-001'...")
@@ -170,10 +158,15 @@ def main():
     # Real GitHub Actions mode
     token = os.environ.get("GITHUB_TOKEN")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
-    pr_number = int(os.environ.get("PR_NUMBER", 0))
+    pr_number_str = os.environ.get("PR_NUMBER", "0")
+    
+    try:
+        pr_number = int(pr_number_str)
+    except ValueError:
+        pr_number = 0
     
     if not token or not repo_name or not pr_number:
-        print("Error: Missing GITHUB_TOKEN, GITHUB_REPOSITORY, or PR_NUMBER")
+        print(f"Error: Missing env vars. token={'yes' if token else 'no'}, repo={repo_name}, pr={pr_number}")
         sys.exit(1)
     
     allowed_repos = {
@@ -183,7 +176,6 @@ def main():
     }
     allow_self = os.environ.get("TRUSTNET_ALLOW_SELF_REPO") == "1"
     
-    # Double safety check even outside dry-run
     if not DRY_RUN and not allow_self and repo_name.lower() not in allowed_repos:
         print(
             f"Safety guard: '{repo_name}' is not in ALLOWED_REPOS. "
@@ -231,12 +223,12 @@ def main():
         print("-" * 60)
         print(format_comment(report))
         print("-" * 60)
-        print(f"\nâœ… Analysis complete. Risk={report['risk']} Score={report['trust_score']:.2f}")
-        print("ðŸ’¡ To enable live posting: set TRUSTNET_DRY_RUN=false and add repo to ALLOWED_REPOS\n")
+        print(f"\n✅ Analysis complete. Risk={report['risk']} Score={report['trust_score']:.2f}")
+        print("💡 To enable live posting: set TRUSTNET_DRY_RUN=false and add repo to ALLOWED_REPOS\n")
     else:
         pr.create_issue_comment(format_comment(report))
         print(f"Posted analysis to PR #{pr_number} (risk={report['risk']})")
 
+
 if __name__ == "__main__":
     main()
-
