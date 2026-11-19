@@ -561,15 +561,19 @@ def dashboard():
 
 @app.post("/admin/clear-test-data")
 def clear_test_data():
+    """Wipe all data and reinitialize empty tables. Safe for live-only mode."""
     conn = connect()
     try:
-        synthetic = ['john', 'sarah', 'patricia', 'david', 'bot-001', 'bot-002', 
-                     'bot-003', 'sybil-01', 'sybil-02', 'sybil-03', 'sybil-04', 'sybil-05']
-        placeholders = ','.join('?' for _ in synthetic)
-        conn.execute(f"DELETE FROM pull_requests WHERE author_id IN ({placeholders})", synthetic)
-        conn.execute(f"DELETE FROM accounts WHERE account_id IN ({placeholders})", synthetic)
-        conn.execute("DELETE FROM projects WHERE project_id LIKE 'proj-%' OR project_id LIKE 'repo-%'")
+        # Drop all tables safely
+        tables = ["pull_requests", "accounts", "projects", "vouches", 
+                  "denounces", "trust_edges", "denounce_appeals", "account_vouches"]
+        for t in tables:
+            conn.execute(f"DROP TABLE IF EXISTS {t}")
         conn.commit()
-        return {"status": "cleared", "message": "Synthetic test data removed"}
+        # Recreate schema with correct column names
+        init_db()
+        return {"status": "cleared", "message": "All data wiped. DB reinitialized."}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
     finally:
         conn.close()
