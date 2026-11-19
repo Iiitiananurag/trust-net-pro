@@ -1,10 +1,18 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TrustNet Dashboard</title>
-<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js">// Auto-refresh dashboard every 30 seconds to show live PR activity
+setInterval(() => {
+  loadGraph();
+  loadCampaigns();
+  loadSybil();
+  console.log('Dashboard refreshed with latest PR data');
+}, 30000);
+
+</script>
 <style>
   :root {
     --bg: #0d1421; --panel: #16203a; --panel2: #1c2a4a;
@@ -183,6 +191,14 @@ async function analyze() {
 }
 
 loadGraph(); loadCampaigns(); loadSybil(); analyze();
+// Auto-refresh dashboard every 30 seconds to show live PR activity
+setInterval(() => {
+  loadGraph();
+  loadCampaigns();
+  loadSybil();
+  console.log('Dashboard refreshed with latest PR data');
+}, 30000);
+
 </script>
 </body>
 </html>
