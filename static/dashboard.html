@@ -87,12 +87,9 @@ setInterval(() => {
       <input id="in-viewer" placeholder="viewer project" value="patricia">
       <button onclick="analyze()">Analyze</button>
     </div>
-    <div class="row">
-      <button class="ghost" onclick="quick('john')">john (genuine)</button>
-      <button class="ghost" onclick="quick('sarah')">sarah (newcomer)</button>
-      <button class="ghost" onclick="quick('bot-001')">bot-001 (campaign)</button>
-      <button class="ghost" onclick="quick('sybil-01')">sybil-01 (ring)</button>
-    </div>
+    <p style="color: var(--muted); font-size: 13px; margin-top: 8px;">
+      Enter a GitHub username who opened a PR → click Analyze
+    </p>
     <div class="risk" id="risk-card">
       <div class="badge" id="r-badge"></div>
       <div class="score" id="r-score"></div>

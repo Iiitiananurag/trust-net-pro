@@ -1,4 +1,4 @@
-﻿import os
+import os
 import hmac
 import hashlib
 import json
@@ -558,3 +558,19 @@ from pathlib import Path as _Path
 @app.get("/dashboard", response_class=FileResponse)
 def dashboard():
     return FileResponse(_Path(__file__).parent / "static" / "dashboard.html")
+
+
+@app.post("/admin/clear-test-data")
+def clear_test_data():
+    conn = connect()
+    try:
+        synthetic = ['john', 'sarah', 'patricia', 'david', 'bot-001', 'bot-002', 
+                     'bot-003', 'sybil-01', 'sybil-02', 'sybil-03', 'sybil-04', 'sybil-05']
+        placeholders = ','.join('?' for _ in synthetic)
+        conn.execute(f"DELETE FROM pull_requests WHERE author_id IN ({placeholders})", synthetic)
+        conn.execute(f"DELETE FROM accounts WHERE account_id IN ({placeholders})", synthetic)
+        conn.execute("DELETE FROM projects WHERE project_id LIKE 'proj-%' OR project_id LIKE 'repo-%'")
+        conn.commit()
+        return {"status": "cleared", "message": "Synthetic test data removed"}
+    finally:
+        conn.close()
