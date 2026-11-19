@@ -560,3 +560,55 @@ def get_history(account_id: str):
         return contributor_history(conn, account_id)
     finally:
         conn.close()
+
+
+# --- VISUAL TRUST GRAPH (Cytoscape.js) ---
+from fastapi.responses import HTMLResponse
+
+@app.get("/graph-view", response_class=HTMLResponse)
+def graph_view():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>TrustNet - Trust Graph</title>
+  <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #f7fafc; }
+    h3 { margin: 8px; text-align: center; color: #1a365d; }
+    #cy { width: 100vw; height: 90vh; }
+    #stats { text-align: center; color: #4a5568; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h3>TrustNet: Decentralized Project-to-Project Trust Graph</h3>
+  <div id="stats">Loading...</div>
+  <div id="cy"></div>
+  <script>
+    fetch('/trust-graph').then(r => r.json()).then(g => {
+      document.getElementById('stats').textContent =
+        g.nodes.length + ' projects, ' + g.edge_count + ' trust edges (arrow thickness = weight)';
+      cytoscape({
+        container: document.getElementById('cy'),
+        elements: { nodes: g.nodes, edges: g.edges },
+        style: [
+          { selector: 'node', style: {
+              'label': 'data(id)', 'background-color': '#2b6cb0',
+              'color': '#1a365d', 'font-size': 10, 'text-valign': 'bottom',
+              'width': 22, 'height': 22 } },
+          { selector: 'node[id = "patricia"]', style: { 'background-color': '#e53e3e', 'width': 34, 'height': 34 } },
+          { selector: 'node[id = "ghostty"]', style: { 'background-color': '#38a169', 'width': 34, 'height': 34 } },
+          { selector: 'edge', style: {
+              'curve-style': 'bezier', 'target-arrow-shape': 'triangle',
+              'line-color': '#a0aec0', 'target-arrow-color': '#a0aec0',
+              'width': 'mapData(weight, 0, 1, 1, 6)',
+              'label': 'data(weight)', 'font-size': 8, 'color': '#718096' } }
+        ],
+        layout: { name: 'cose', animate: false },
+        wheelSensitivity: 0.2
+      });
+    });
+  </script>
+</body>
+</html>
+"""
