@@ -1,4 +1,4 @@
-# 🛡️ TrustNet: Decentralized Trust Network for Open Source
+# 🛡️ TrustNet: Decentralized Trust Network or Open Source
 
 > **Catalyst Problem 5 Submission**  
 > Protecting projects from AI slop campaigns without central authority.  
