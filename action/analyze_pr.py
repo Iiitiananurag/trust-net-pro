@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import sys
 import urllib.request
@@ -15,7 +15,7 @@ from engine.trust import classify, score_contributor
 
 
 def format_comment(report):
-    risk_emoji = {"low": "🟢", "neutral": "⚪", "elevated": "🔴"}[report["risk"]]
+    risk_emoji = {"low": "ðŸŸ¢", "neutral": "âšª", "elevated": "ðŸ”´"}[report["risk"]]
     viewer = report.get("viewer", "local")
     lines = [
         f"## {risk_emoji} Trust Network Analysis",
@@ -32,11 +32,11 @@ def format_comment(report):
     if report.get("campaign_id"):
         lines.append("")
         summary = report.get("campaign_summary") or "Coordinated cross-repository campaign detected."
-        lines.append(f"⚠ **ALERT ({report['campaign_id']}):** {summary}")
+        lines.append(f"âš  **ALERT ({report['campaign_id']}):** {summary}")
 
     if report.get("sybil_flagged"):
         lines.append("")
-        lines.append("⚠ **SYBIL ALERT:** Account is linked to a suspicious trust farm or mutual-vouch ring.")
+        lines.append("âš  **SYBIL ALERT:** Account is linked to a suspicious trust farm or mutual-vouch ring.")
 
     if report.get("synthetic_demo"):
         lines.append("")
@@ -44,7 +44,7 @@ def format_comment(report):
 
     lines.append("")
     lines.append("---")
-    lines.append("*Powered by Catalyst Problem 5 — Decentralized Trust Network*")
+    lines.append("*Powered by Catalyst Problem 5 â€” Decentralized Trust Network*")
     return "\n".join(lines)
 
 
@@ -131,7 +131,7 @@ def main():
     
     if DRY_RUN:
         print("\n" + "=" * 70)
-        print("🛡️  TRUSTNET DRY-RUN MODE (default)")
+        print("ðŸ›¡ï¸  TRUSTNET DRY-RUN MODE (default)")
         print("=" * 70)
         print("This tool will NOT post comments to GitHub.")
         print("To enable live posting, set TRUSTNET_DRY_RUN=false AND")
@@ -231,11 +231,12 @@ def main():
         print("-" * 60)
         print(format_comment(report))
         print("-" * 60)
-        print(f"\n✅ Analysis complete. Risk={report['risk']} Score={report['trust_score']:.2f}")
-        print("💡 To enable live posting: set TRUSTNET_DRY_RUN=false and add repo to ALLOWED_REPOS\n")
+        print(f"\nâœ… Analysis complete. Risk={report['risk']} Score={report['trust_score']:.2f}")
+        print("ðŸ’¡ To enable live posting: set TRUSTNET_DRY_RUN=false and add repo to ALLOWED_REPOS\n")
     else:
         pr.create_issue_comment(format_comment(report))
         print(f"Posted analysis to PR #{pr_number} (risk={report['risk']})")
 
 if __name__ == "__main__":
     main()
+
