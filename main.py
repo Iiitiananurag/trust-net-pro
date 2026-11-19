@@ -1,4 +1,4 @@
-import os
+﻿import os
 import hmac
 import hashlib
 import json
@@ -39,6 +39,17 @@ except Exception as e:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    # Auto-seed benchmark data if DB is empty (first boot after deploy)
+    try:
+        conn = connect()
+        count = conn.execute("SELECT COUNT(*) FROM pull_requests").fetchone()[0]
+        if count == 0:
+            print("\U0001f331 Empty DB detected - auto-seeding benchmark data...")
+            from simulator.seed import seed
+            seed(malicious_b=False, include_sybil_ring=True, ghostty_vouch_file="auto")
+        conn.close()
+    except Exception as e:
+        print(f"Auto-seed failed (will retry on next request): {e}")
     yield
 
 app = FastAPI(title="Decentralized Trust Network API (Catalyst Problem 5)", lifespan=lifespan)
@@ -461,81 +472,6 @@ async def github_webhook(request: Request):
     return {"status": "ok"}
 
 # --- GITHUB APP WEBHOOK HANDLER (SAFE MODE) ---
-@app.post("/webhook")
-async def github_webhook(request: Request):
-    body_bytes = await request.body()
-    
-    # Verify signature
-    if WEBHOOK_SECRET:
-        sig_header = request.headers.get("X-Hub-Signature-256", "")
-        expected = "sha256=" + hmac.new(
-            WEBHOOK_SECRET.encode(), body_bytes, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(sig_header, expected):
-            raise HTTPException(status_code=403, detail="Invalid signature")
-    
-    data = json.loads(body_bytes)
-    event_type = request.headers.get("X-GitHub-Event")
-    
-    if event_type != "pull_request":
-        return {"message": "Ignored"}
-
-    action = data.get("action")
-    if action not in ["opened", "reopened"]:
-        return {"message": "Ignored"}
-
-    pr = data["pull_request"]
-    author = pr["user"]["login"]
-    pr_number = pr["number"]
-    repo_full_name = data["repository"]["full_name"]
-    installation_id = data["installation"]["id"]
-
-    print(f"Processing PR #{pr_number} by {author} in {repo_full_name}")
-
-    conn = connect()
-    try:
-        upsert_pr_and_author(
-            conn,
-            pr_id=f"{repo_full_name}#{pr_number}",
-            repo_id=repo_full_name,
-            author_id=author,
-            title=pr.get("title", ""),
-            body=pr.get("body", "") or "",
-            diff="",
-            created_at=pr["created_at"],
-            author_created_at=pr["user"].get("created_at"),
-        )
-        
-        campaigns = detect_campaigns_detailed(conn, min_cluster_size=3)
-        sybil = detect_sybil_rings(conn)
-        score, has_signals, evidence = score_contributor(conn, repo_full_name, author)
-    finally:
-        conn.close()
-
-    matched_campaign = next((c for c in campaigns if author in c["accounts"]), None)
-    sybil_flagged = author in sybil["sybil_accounts"]
-    risk = "elevated" if (matched_campaign or sybil_flagged) else classify(score, has_signals)
-
-    # Build structured response WITHOUT auto-posting
-    result = {
-        "status": "analyzed",
-        "pr_number": pr_number,
-        "repo": repo_full_name,
-        "author": author,
-        "risk": risk,
-        "score": round(score, 4),
-        "has_signals": has_signals,
-        "evidence": evidence,
-        "campaign_id": matched_campaign["id"] if matched_campaign else None,
-        "sybil_flagged": sybil_flagged,
-        "comment_body": _format_analysis_markdown(risk, score, evidence, matched_campaign, sybil_flagged),
-        "auto_post_disabled": True,
-        "reason": "Ephemeral storage detected; writes require persistent DB migration",
-    }
-    
-    print(f"Analysis ready for PR #{pr_number}: risk={risk}")
-    return result
-
 
 def _format_analysis_markdown(risk, score, evidence, campaign, sybil_flagged):
     """Helper to generate markdown without posting it."""
