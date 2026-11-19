@@ -1,4 +1,4 @@
-import os
+﻿import os
 import hmac
 import hashlib
 import json
@@ -39,17 +39,7 @@ except Exception as e:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
-    # Auto-seed benchmark data if DB is empty (first boot after deploy)
-    try:
-        conn = connect()
-        count = conn.execute("SELECT COUNT(*) FROM pull_requests").fetchone()[0]
-        if count == 0:
-            print("🌱 Empty DB detected - auto-seeding benchmark data...")
-            from simulator.seed import seed
-            seed(malicious_b=False, include_sybil_ring=True, ghostty_vouch_file="auto")
-        conn.close()
-    except Exception as e:
-        print(f"Auto-seed failed (will retry on next request): {e}")
+    # Auto-seed DISABLED - running on live PR data only
     yield
 
 app = FastAPI(title="Decentralized Trust Network API (Catalyst Problem 5)", lifespan=lifespan)
