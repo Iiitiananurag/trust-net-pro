@@ -37,7 +37,6 @@ except Exception as e:
     integration = None
 
 @asynccontextmanager
-@asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
     # Auto-seed benchmark data if DB is empty (first boot after deploy)
